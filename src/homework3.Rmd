@@ -1,0 +1,186 @@
+---
+title: "Homework3"
+author: "Jacqueline Oakes"
+date: "2/18/2022"
+output: github_document
+---
+
+```{r setup, include = FALSE}
+#Load all the good stuff
+library(tidyverse)
+library(dplyr)
+library(gt)
+library(forcats)
+library(stringr)
+library(janitor)
+library(paletteer)
+3
+#Working directory for .RMD
+knitr::opts_knit$set(echo = TRUE,
+                     root.dir = rprojroot::find_rstudio_root_file())
+
+#Controlling figure output in markdown
+knitr::opts_chunk$set(
+#  fig.height =   
+  fig.width = 6,
+#  fig.asp = .5,
+  out.width = "90%",
+#  out.height = 
+ fig.align  = "center",
+  cache = FALSE,
+  eval  = TRUE,
+  echo  = FALSE
+)
+
+#My Colours (from viridis)
+my_purple <- "#440154FF"
+my_yellow <- "#FDE725FF"
+
+#Set Theme for ggplot2
+theme_set(theme_bw() + theme(plot.title = element_text(hjust = 0.5), legend.position = "bottom"))
+
+#Set Scientific notation output and decimal places for knitr
+options(scipen = 999)
+options(digits = 4)
+```
+
+# Problem 3.1
+```{r error = FALSE, warning = FALSE, message = FALSE, fig.height=8}
+instacart.df <- read_csv("./data/instacart.CSV") %>%
+ janitor::clean_names()
+
+instacart.df1 <- instacart.df %>% #create percent reordered variable
+  group_by(order_id, user_id) %>%
+  summarise(pct_items = (mean(reordered) * 100),
+            n_days = length(unique(days_since_prior_order)),
+            n_items = length(unique(product_name)),
+            n_aisles = length(unique(aisle)),
+            n_dept = length(unique(department_id)),
+            n_orders = max(add_to_cart_order)) %>%
+  ungroup() %>%
+  summarise(across(contains(c("n_", "pct")),
+                  list(mean = mean, sd = sd, median = median), na.rm = TRUE,
+                  .names = "{.col}-{.fn}")) %>%
+  pivot_longer(cols = everything(), 
+               names_to = c("names", ".value"), 
+               names_sep = "-") %>%
+  mutate(names = recode(names, pct_items = "Pecent of items", 
+                        n_days = "Number of days",
+                        n_items =  "Number of items",
+                        n_aisles = "Number of aisles",
+                        n_dept = "Number of departments",
+                        n_orders = "Number of orders")) %>%
+  rename("Names" = "names",
+         "Mean" = "mean",
+         "SD" = "sd")
+  
+instacart.df1 %>% #create visualization
+gt() %>%
+  tab_header(title = md("**Instacart data Mean, Median, and SD**")) %>%
+  cols_align(align = c("left"),
+            columns = "Names") %>%
+  tab_options(container.height = pct(30), #resize table
+              container.width = pct(30),
+              table.font.size = "small") %>%
+  as_raw_html() #save table
+```
+
+# Problem 3.2
+```{r error = FALSE, warning = FALSE, message = FALSE, fig.height=20}
+instacart.df2 <- instacart.df %>%
+  group_by(aisle) %>%
+  summarise(count_order = n_distinct(order_id)) %>%
+  mutate(aisle = str_to_title(aisle),
+         aisle = as.factor(aisle),
+         aisle = fct_reorder(aisle, count_order)) %>%
+  arrange(desc(count_order))
+
+instacart.df2 %>%
+  ggplot(aes(x = count_order, y = aisle, fill = count_order)) +
+  geom_col() +
+  scale_fill_viridis_b() +
+  labs(x = "Count of Orders", y = "Aisle",
+    title = "Number of orders by Aisle") +
+    theme(legend.position = "right") +
+    theme(legend.title = element_blank()) +
+    theme(plot.title = element_text(face = "bold")) +
+    theme(panel.background = element_blank()) +
+    theme(axis.line = element_line(colour = "black")) +
+    theme(plot.title = element_text(hjust = 0.5))
+```
+
+# Problem 3.3
+```{r error = FALSE, warning = FALSE, message = FALSE, fig.height=15, fig.width= 15}
+top6_dept <- instacart.df %>%
+  group_by(department) %>%
+  summarise(count_dept = n()) %>%
+  arrange(desc(count_dept)) %>%
+  slice(1:6) %>%
+  ungroup()
+ 
+top6_aisle <- instacart.df %>%
+  filter(department %in% top6_dept$department) %>%
+  group_by(department, aisle) %>%
+  summarise(count_aisle = n()) %>%
+  arrange(desc(count_aisle)) %>%
+  group_by(department) %>%
+  slice(1:6) %>%
+  ungroup() %>%
+  mutate(department = str_to_title(department) %>%
+      as.factor() %>%
+      fct_reorder(count_aisle, .desc = TRUE),
+      aisle = str_to_title(aisle) %>%
+      as.factor() %>%
+      fct_reorder2(department, count_aisle, .desc = TRUE)) %>%
+  arrange(desc(count_aisle))
+  
+top6_aisle %>%
+ggplot(aes(x = count_aisle, y = aisle, fill = department)) +
+  geom_col() +
+    facet_wrap(vars(department), scales = "free") +
+  labs(x = "Count", y = "Aisle",
+    title = "Top 6 Aisles and Department by Items Purchased") +
+    theme(legend.position = "right") +
+    theme(legend.title = element_blank()) +
+    theme(plot.title = element_text(face = "bold")) +
+    theme(panel.background = element_blank()) +
+    theme(axis.line = element_line(colour = "black")) +
+    theme(plot.title = element_text(hjust = 0.5))
+```
+
+# Problem 3.4
+```{r error = FALSE, warning = FALSE, message = FALSE, fig.height=8}
+top5_aisle <- instacart.df %>%
+  group_by(aisle) %>%
+  summarise(count_aisle = n()) %>%
+  arrange(desc(count_aisle)) %>%
+  slice(1:5) %>%
+  ungroup()
+  
+items_top5_aisle <- instacart.df %>%
+  select(aisle, product_name) %>%
+  filter(aisle %in% top5_aisle$aisle) %>%
+  mutate(aisle = str_to_title(aisle)) %>%
+  group_by(aisle, product_name) %>%
+  summarise(count_item = n()) %>%
+  arrange(desc(count_item)) %>%
+  slice(1:5) %>%
+  arrange(desc(count_item))
+ 
+items_top5_aisle %>% #create visualization
+gt() %>%
+  tab_header(title = md("**Top 5 Items Purchased in the Top 5 Aisles**")) %>%
+  cols_align(align = c("right"),
+             columns = count_item) %>%
+  cols_align(align = c("left"),
+             columns = product_name) %>%
+  cols_label(count_item = md("**Total**"),
+             product_name = md("**Product Name**")) %>%
+  data_color(columns = c(count_item),
+             colors = scales::col_numeric(
+             palette = c("#ffffff", "#f2fbd2", "#c9ecb4", "#93d3ab", "#35b0ab"),                  domain = NULL)) %>%
+  tab_options(container.height = pct(30), #resize table
+              container.width = pct(30),
+              table.font.size = "small") %>%
+  as_raw_html() #save table
+```
